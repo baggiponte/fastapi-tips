@@ -209,7 +209,52 @@ anyio.run(main)
 > [!NOTE]
     Consider supporting the creator of [`asgi-lifespan`][asgi-lifespan] [Florimond Manca][florimondmanca] via GitHub Sponsors.
 
-## 6. Use Lifespan State instead of `app.state`
+## 6. Use `pytest-asyncio` fixtures to test your FastAPI and ASGI applications
+
+When writing fixtures for your FastAPI applications, you should use [pytest-asyncio](pytest-asyncio) to define fixtures. Besides, if your application has a lifespan, you should use [`asgi-lifespan`](asgi-lifespan) to run the lifespan events.
+
+```python
+from collections.abc import AsyncGenerator
+
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
+# path to your FastAPI application with a lifespan
+from path.to.app import app
+
+
+@pytest_asyncio.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
+    async with LifespanManager(app) as manager:
+        async with AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://localhost:8080",
+        ) as client:
+            yield client
+
+
+@pytest.mark.asyncio
+async def test_app_starts(client: AsyncClient) -> None:
+    response = await client.get("/")
+    assert response.status_code == 200
+```
+
+As a bonus: since `anyio` is already a dependency, you can mark your test with `pytest.mark.anyio` like this:
+
+```python
+# make anyio aware to use asyncio as the backend
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
+
+@pytest.mark.anyio
+async def test_app_starts(client: AsyncClient) -> None:
+    response = await client.get("/")
+    assert response.status_code == 200
+```
+
+## 7. Use Lifespan State instead of `app.state`
 
 Since not long ago, FastAPI supports the [lifespan state], which defines a standard way to manage objects that need to be created at
 startup, and need to be used in the request-response cycle.
